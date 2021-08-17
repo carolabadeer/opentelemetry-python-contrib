@@ -12,7 +12,6 @@ from opentelemetry.sdk.resources import Resource
 
 from opentelemetry.sdk.trace.sampling import Decision, Sampler, SamplingResult, TraceIdRatioBased
 
-# new imports 
 from XRaySamplerClient import XRaySamplerClient
 from GetSamplingRulesResponse import SamplingRule, SamplingRuleRecord, GetSamplingRulesResponse
 from GetSamplingRulesRequest import GetSamplingRulesRequest
