@@ -15,17 +15,19 @@ from opentelemetry.sdk.trace.sampling import Decision, Sampler, SamplingResult, 
 from XRaySamplerClient import XRaySamplerClient
 from GetSamplingRulesResponse import SamplingRule, SamplingRuleRecord, GetSamplingRulesResponse
 from GetSamplingRulesRequest import GetSamplingRulesRequest
+from RulePoller import RulePoller
+
 
 class AWSXRayRemoteSampler(Sampler):
-    def __init__(self, resource, endpoint="http://localhost:2000", sampler=TraceIdRatioBased(0.05)):
-        self.receiver_endpoint = endpoint 
+    def __init__(self, resource: Resource, endpoint="http://localhost:2000", sampler=TraceIdRatioBased(0.05)):
+        self.receiver_endpoint = endpoint
         self.initial_sampler = sampler
         self.resource = resource
 
         self.client = XRaySamplerClient(endpoint)
 
         self.rule_cache = []
-    
+
     def should_sample(
         self,
         parent_context: Optional["Context"],
@@ -38,48 +40,11 @@ class AWSXRayRemoteSampler(Sampler):
     ) -> "SamplingResult":
 
         return self.sampler.should_sample(parent_context, trace_id, name, kind, attributes, links, trace_state)
-     
+
     def get_description(self) -> str:
         return "AwsXrayRemoteSampler{" + self.sampler.getDescription() + "}"
 
-    def _update_rule_cache(self, rule):
-        self.rule_cache.append(SamplingRuleRecord.create(
-                rule["CreatedAt"],
-                rule["ModifiedAt"],
-                SamplingRule.create(
-                    rule["SamplingRule"]["Attributes"],
-                    rule["SamplingRule"]["FixedRate"],
-                    rule["SamplingRule"]["Host"],
-                    rule["SamplingRule"]["HTTPMethod"],
-                    rule["SamplingRule"]["Priority"],
-                    rule["SamplingRule"]["ReservoirSize"],
-                    rule["SamplingRule"]["ResourceARN"],
-                    rule["SamplingRule"]["RuleARN"],
-                    rule["SamplingRule"]["RuleName"],
-                    rule["SamplingRule"]["ServiceName"],
-                    rule["SamplingRule"]["ServiceType"],
-                    rule["SamplingRule"]["URLPath"],
-                    rule["SamplingRule"]["Version"]
-                )
-            ))
-    
-    def _get_and_update_sampling_rules(self):
-        rules_response = self.client.getSamplingRules()
-        rules_response_obj = GetSamplingRulesResponse.create(rules_response["NextToken"], rules_response["SamplingRuleRecords"])
-        print("next token parsed", rules_response_obj.get_next_token())
-
-        for rule in rules_response_obj.get_sampling_rules():
-            self._update_rule_cache(rule)
-
-
-        while rules_response["NextToken"]:
-            request = GetSamplingRulesRequest.create(rules_response["NextToken"])
-            rules_response = self.client.getSamplingRules()
-
-            rules_response_obj = GetSamplingRulesResponse.create(rules_response["NextToken"], rules_response["SamplingRuleRecords"])
-            for rule in rules_response_obj.get_sampling_rules():
-                self._update_rule_cache(rule)
-
-
-    def _generate_client_ID():
-        pass
+    def get_and_update_sampling_rules(self):
+        # start rule polling thread
+        rule_poller = RulePoller(self.rule_cache, self.client)
+        rule_poller.start()
